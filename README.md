@@ -4,8 +4,7 @@ Introduction
 This project is a web-based spreadsheet application that enables users to input data, perform arithmetic operations, and generate charts for data visualization. It features a user-friendly interface with modern styling and dynamic functionalities similar to Google Sheets.
 
 Live Demo
-
-Web Application Mimicking Google Sheets
+ https://rachu9.github.io/Web-Application-Mimicking-Google-Sheets/
 
 Features
 
