@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Spreadsheet with Charts & Arithmetic Functions</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #f4f7f9;
+            font-family: Arial, sans-serif;
+        }
+        .spreadsheet {
+            border-collapse: collapse;
+            width: 100%;
+            background-color: #ffffff;
+        }
+        .spreadsheet td, .spreadsheet th {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+            min-width: 80px;
+        }
+        .selected {
+            background-color: #b3d4fc;
+        }
+        .toolbar, .formula-bar {
+            background-color: #2c3e50;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            color: white;
+        }
+        .button {
+            margin: 5px;
+        }
+        .chart-container {
+            margin-top: 20px;
+            width: 80%;
+            height: 400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1 class="title has-text-centered">Web Spreadsheet with Charts & Arithmetic Functions</h1>
+    
+    <div class="toolbar">
+        <button class="button is-primary" id="add-row">Add Row</button>
+        <button class="button is-primary" id="add-col">Add Column</button>
+        <button class="button is-danger" id="remove-row">Remove Row</button>
+        <button class="button is-danger" id="remove-col">Remove Column</button>
+        <button class="button is-warning" id="download">Download Excel</button>
+        <button class="button is-info" id="generate-bar-chart">Bar Chart</button>
+        <button class="button is-info" id="generate-line-chart">Line Chart</button>
+        <button class="button is-info" id="generate-pie-chart">Pie Chart</button>
+    </div>
+    
+    <div class="formula-bar">
+        <input type="text" id="formula-input" placeholder="Enter formula (e.g., =SUM(A1:A3))">
+        <button class="button is-light" id="apply-formula">Apply</button>
+    </div>
+
+    <table class="spreadsheet" id="spreadsheet">
+        <thead>
+            <tr id="column-headers">
+                <th></th>
+            </tr>
+        </thead>
+        <tbody id="spreadsheet-body"></tbody>
+    </table>
+    
+    <div class="chart-container">
+        <canvas id="chartCanvas"></canvas>
+    </div>
+
+    <script>
+        let spreadsheet = [];
+        let selectedCell = null;
+        let chartInstance = null;
+
+        function initializeSpreadsheet(rows = 10, cols = 5) {
+            spreadsheet = Array.from({ length: rows }, () => Array(cols).fill(""));
+            renderSpreadsheet();
+        }
+
+        function renderSpreadsheet() {
+            let tbody = document.getElementById('spreadsheet-body');
+            let columnHeaders = document.getElementById('column-headers');
+            tbody.innerHTML = '';
+            columnHeaders.innerHTML = '<th></th>';
+
+            for (let j = 0; j < spreadsheet[0].length; j++) {
+                columnHeaders.innerHTML += `<th>${String.fromCharCode(65 + j)}</th>`;
+            }
+
+            for (let i = 0; i < spreadsheet.length; i++) {
+                let row = document.createElement('tr');
+                let rowHeader = document.createElement('th');
+                rowHeader.textContent = i + 1;
+                row.appendChild(rowHeader);
+
+                for (let j = 0; j < spreadsheet[i].length; j++) {
+                    let cell = document.createElement('td');
+                    cell.textContent = spreadsheet[i][j];
+                    cell.setAttribute('data-row', i);
+                    cell.setAttribute('data-col', j);
+                    cell.contentEditable = true;
+                    cell.addEventListener('focus', () => selectCell(i, j, cell));
+                    cell.addEventListener('input', () => updateCell(i, j, cell.textContent));
+                    row.appendChild(cell);
+                }
+                tbody.appendChild(row);
+            }
+        }
+
+        function selectCell(row, col, cell) {
+            if (selectedCell) selectedCell.classList.remove('selected');
+            selectedCell = cell;
+            selectedCell.classList.add('selected');
+            document.getElementById('formula-input').value = spreadsheet[row][col];
+        }
+
+        function updateCell(row, col, value) {
+            spreadsheet[row][col] = value;
+            applyFormula();
+        }
+
+        function parseCellReference(ref) {
+            let col = ref.charCodeAt(0) - 65;
+            let row = parseInt(ref.slice(1)) - 1;
+            return { row, col };
+        }
+
+        function applyFormula() {
+            for (let i = 0; i < spreadsheet.length; i++) {
+                for (let j = 0; j < spreadsheet[i].length; j++) {
+                    let cell = document.querySelector(`[data-row="${i}"][data-col="${j}"]`);
+                    let value = spreadsheet[i][j];
+
+                    if (typeof value === "string" && value.startsWith("=")) {
+                        let formula = value.slice(1).toUpperCase();
+                        let match = formula.match(/(SUM|AVG|MIN|MAX)\((\w+\d+):(\w+\d+)\)/);
+
+                        if (match) {
+                            let operation = match[1];
+                            let start = parseCellReference(match[2]);
+                            let end = parseCellReference(match[3]);
+
+                            let values = [];
+                            for (let r = start.row; r <= end.row; r++) {
+                                for (let c = start.col; c <= end.col; c++) {
+                                    let num = parseFloat(spreadsheet[r][c]);
+                                    if (!isNaN(num)) values.push(num);
+                                }
+                            }
+
+                            let result = 0;
+                            if (operation === "SUM") result = values.reduce((a, b) => a + b, 0);
+                            if (operation === "AVG") result = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+                            if (operation === "MIN") result = Math.min(...values);
+                            if (operation === "MAX") result = Math.max(...values);
+
+                            cell.textContent = result;
+                            spreadsheet[i][j] = result;
+                        }
+                    }
+                }
+            }
+        }
+
+        document.getElementById('apply-formula').addEventListener('click', () => {
+            if (selectedCell) {
+                let input = document.getElementById('formula-input').value;
+                selectedCell.textContent = input;
+                let row = selectedCell.getAttribute('data-row');
+                let col = selectedCell.getAttribute('data-col');
+                spreadsheet[row][col] = input;
+                applyFormula();
+            }
+        });
+
+        document.getElementById('add-row').addEventListener('click', () => { spreadsheet.push(Array(spreadsheet[0].length).fill("")); renderSpreadsheet(); });
+        document.getElementById('add-col').addEventListener('click', () => { spreadsheet.forEach(row => row.push("")); renderSpreadsheet(); });
+        document.getElementById('remove-row').addEventListener('click', () => { if (spreadsheet.length > 1) spreadsheet.pop(); renderSpreadsheet(); });
+        document.getElementById('remove-col').addEventListener('click', () => { if (spreadsheet[0].length > 1) spreadsheet.forEach(row => row.pop()); renderSpreadsheet(); });
+
+        function generateChart(type) {
+            if (chartInstance) chartInstance.destroy();
+            let labels = spreadsheet.map((row, index) => `Row ${index + 1}`);
+            let data = spreadsheet.map(row => row.map(val => parseFloat(val) || 0));
+            let datasets = data[0].map((_, colIndex) => ({
+                label: `Column ${String.fromCharCode(65 + colIndex)}`,
+                data: data.map(row => row[colIndex]),
+                backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'][colIndex % 5]
+            }));
+
+            let ctx = document.getElementById('chartCanvas').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: type,
+                data: { labels, datasets },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        document.getElementById('generate-bar-chart').addEventListener('click', () => generateChart('bar'));
+        document.getElementById('generate-line-chart').addEventListener('click', () => generateChart('line'));
+        document.getElementById('generate-pie-chart').addEventListener('click', () => generateChart('pie'));
+
+        
+
+        initializeSpreadsheet();
+    </script>
+</body>
+</html>
